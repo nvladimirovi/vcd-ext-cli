@@ -10,5 +10,10 @@
   "author": "Nikola Iliev",
   "license": "MIT",
   "preferGlobal": true,
-  "bin": "./vcd-ext-cli.js"
+  "bin": "./vcd-ext-cli.js",
+  "peerDependencies": {
+    "commander": "2.16.0",
+    "ejs": "2.6.1",
+    "inquirer": "6.0.0"
+  }
 }

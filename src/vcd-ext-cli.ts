@@ -4,7 +4,8 @@ import fs from "fs";
 import program from "commander";
 import inquirer from "inquirer";
 import { createDirectoryContents } from "./logic";
-import { UserInput } from "./interfaces/UserInput";
+import { UserAnswer } from "./interfaces/UserAnswer";
+import { RawPluginMetadata } from "./interfaces/PluginMetadata";
 
 const { prompt } = inquirer;
 const CURR_DIR = process.cwd();
@@ -13,13 +14,13 @@ const CHOICES = fs.readdirSync(`${__dirname}/templates`);
 // Craft questions to present to users
 const questions: inquirer.Questions<{}> = [
     {
-        name: "project-choice",
+        name: "projectChoice",
         type: "list",
         message: "What project template would you like to generate?",
         choices: CHOICES
     },
     {
-        name: "project-name",
+        name: "projectName",
         type: "input",
         message: "Project name:",
         validate: function (input: string) {
@@ -71,7 +72,7 @@ const questions: inquirer.Questions<{}> = [
         name: "permissions",
         type: "input",
         message: "Plug-in permissions:",
-        default: []
+        default: ""
     },
     {
         name: "description",
@@ -104,16 +105,6 @@ const questions: inquirer.Questions<{}> = [
         }
     },
     {
-        name: "module",
-        type: "input",
-        message: "Plug-in module:",
-        default: "SubnavPluginModule",
-        validate: function (input: string) {
-            if (/([A-Z])\w+/.test(input)) return true;
-            else return 'Module name has to be in this format "ExampleModuleName"';
-        }
-    },
-    {
         name: "route",
         type: "input",
         message: "Plug-in route",
@@ -121,12 +112,12 @@ const questions: inquirer.Questions<{}> = [
     }
 ];
 
-function populateOptions(answers: inquirer.Answers) {
+function populateOptions(answers: inquirer.Answers): RawPluginMetadata {
     const options: any = {};
     Object
         .keys(answers)
         .forEach((key) => {
-            if (key === "project-choice" || key === "project-name") return;
+            if (key === "projectChoice" || key === "projectName") return;
 
             options[key] = answers[key];
         });
@@ -140,9 +131,9 @@ program
     .description("Generate Project Template")
     .action(() => {
         prompt(questions)
-            .then((answers: inquirer.Answers) => {
-                const projectChoice = answers["project-choice"];
-                const projectName = answers["project-name"];
+            .then((answers: UserAnswer) => {
+                const projectChoice = answers["projectChoice"];
+                const projectName = answers["projectName"];
                 const templatePath = `${__dirname}/templates/${projectChoice}`;
                 fs.mkdirSync(`${CURR_DIR}/${projectName}`);
                 createDirectoryContents(templatePath, projectName, populateOptions(answers));

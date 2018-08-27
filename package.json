@@ -12,15 +12,14 @@
     "clean": "rimraf build && rimraf dist",
     "tsc": "tsc",
     "copy-metadata": "cpy package.dist.json dist --rename=package.json",
-    "build": "npm run clean && npm run tsc && ncp build/ dist/ && ncp src/templates dist/ && npm run copy-metadata",
+    "build": "npm run clean && npm run tsc && ncp build/ dist/ && ncp src/templates dist/templates && npm run copy-metadata",
     "build-ts": "tsc",
     "watch-ts": "tsc -w"
   },
   "dependencies": {
     "commander": "2.16.0",
     "ejs": "2.6.1",
-    "inquirer": "6.0.0",
-    "mongoose": "5.2.1"
+    "inquirer": "6.0.0"
   },
   "devDependencies": {
     "@types/ejs": "^2.6.0",

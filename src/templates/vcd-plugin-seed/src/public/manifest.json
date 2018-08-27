@@ -1,14 +1,14 @@
 {
-    "urn": "vmware:vcloud:plugin:seed",
-    "name": "Simple plugin",
-    "containerVersion": "9.1.0",
-    "version": "1.0.0",
-    "scope": ["service-provider", "tenant"],
-    "permissions": [],
-    "description": "An example plugin.",
-    "vendor": "VMware",
-    "license": "Copyright (C) VMware 2017-2018.  All rights reserved.",
-    "link": "http://www.vmware.com/support",
+    "urn": "<%= data['urn'] %>",
+    "name": "<%= data['name'] %>",
+    "containerVersion": "<%= data['containerVersion'] %>",
+    "version": "<%= data['version'] %>",
+    "scope": <%- JSON.stringify(data['scope']) %>,
+    "permissions": <%- JSON.stringify(data['permissions']) %>,
+    "description": "<%= data['description'] %>",
+    "vendor": "<%= data['vendor'] %>",
+    "license": "<%= data['license'] %>",
+    "link": "<%= data['link'] %>",
     "module": "SimplePluginModule",
-    "route": "plugin"
+    "route": "<%= data['route'] %>"
 }
