@@ -1,0 +1,14 @@
+{
+  "name": "vec",
+  "version": "1.0.0",
+  "description": "vClould Director Extension CLI",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zenddignite/vcd-ext-cli"
+  },
+  "main": "./vcd-ext-cli.js",
+  "author": "Nikola Iliev",
+  "license": "MIT",
+  "preferGlobal": true,
+  "bin": "./vcd-ext-cli.js"
+}

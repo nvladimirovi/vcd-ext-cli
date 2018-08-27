@@ -1,0 +1,35 @@
+{
+  "name": "vsd-ext-cli",
+  "version": "1.0.0",
+  "description": "vClould Director Extension CLI",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zenddignite/vcd-ext-cli"
+  },
+  "author": "Nikola Iliev",
+  "license": "MIT",
+  "scripts": {
+    "clean": "rimraf build && rimraf dist",
+    "tsc": "tsc",
+    "copy-metadata": "cpy package.dist.json dist --rename=package.json",
+    "build": "npm run clean && npm run tsc && ncp build/ dist/ && ncp src/templates dist/ && npm run copy-metadata",
+    "build-ts": "tsc",
+    "watch-ts": "tsc -w"
+  },
+  "dependencies": {
+    "commander": "2.16.0",
+    "ejs": "2.6.1",
+    "inquirer": "6.0.0",
+    "mongoose": "5.2.1"
+  },
+  "devDependencies": {
+    "@types/ejs": "^2.6.0",
+    "@types/inquirer": "0.0.43",
+    "@types/node": "10.9.2",
+    "cpy-cli": "2.0.0",
+    "ncp": "2.0.0",
+    "rimraf": "2.6.2",
+    "tslint": "5.11.0",
+    "typescript": "3.0.1"
+  }
+}
