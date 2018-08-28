@@ -3,116 +3,22 @@
 import fs from "fs";
 import program from "commander";
 import inquirer from "inquirer";
-import { createDirectoryContents } from "./logic";
 import { UserAnswer } from "./interfaces/UserAnswer";
-import { RawPluginMetadata } from "./interfaces/PluginMetadata";
+import { PluginMetadata } from "./interfaces/PluginMetadata";
+import ejs from "ejs";
+import unzipper from "unzipper";
+import { questions } from "./questions";
 
 const { prompt } = inquirer;
 const CURR_DIR = process.cwd();
-const CHOICES = fs.readdirSync(`${__dirname}/templates`);
 
-// Craft questions to present to users
-const questions: inquirer.Questions<{}> = [
-    {
-        name: "projectChoice",
-        type: "list",
-        message: "What project template would you like to generate?",
-        choices: CHOICES
-    },
-    {
-        name: "projectName",
-        type: "input",
-        message: "Project name:",
-        validate: function (input: string) {
-            if (fs.existsSync(`${CURR_DIR}/${input}`)) {
-                return "You have this directory already.";
-            }
+const dynamicFiles = new Set<string>([
+    "src\\public\\i18n.json",
+    "src\\public\\manifest.json",
+    "package.json"
+]);
 
-            if (/^([A-Za-z\-_\d])+$/.test(input)) {
-                return true;
-            } else {
-                return "Project name may only include letters, numbers, underscores and hashes.";
-            }
-        }
-    },
-    {
-        name: "urn",
-        type: "input",
-        message: "Plug-in urn:",
-        default: "vmware:vcloud:plugin:seed"
-    },
-    {
-        name: "name",
-        type: "input",
-        message: "Plug-in name:",
-        validate: function (input: string) {
-            if (input.length >= 3) return true;
-            else return "Plug-in name may can not contain less then 3 letters.";
-        }
-    },
-    {
-        name: "containerVersion",
-        type: "input",
-        message: "Plug-in containerVersion:",
-        default: "9.1.0"
-    },
-    {
-        name: "version",
-        type: "input",
-        message: "Plug-in version:",
-        default: "1.0.0"
-    },
-    {
-        name: "scope",
-        type: "input",
-        message: "Plug-in scope:",
-        default: "tenant"
-    },
-    {
-        name: "permissions",
-        type: "input",
-        message: "Plug-in permissions:",
-        default: ""
-    },
-    {
-        name: "description",
-        type: "input",
-        message: "Plug-in description:",
-        default: ""
-    },
-    {
-        name: "vendor",
-        type: "input",
-        message: "Plug-in vendor:",
-        validate: function (input: string) {
-            if (input.length >= 3) return true;
-            else return "Plug-in name may can not contain less then 3 letters.";
-        }
-    },
-    {
-        name: "license",
-        type: "input",
-        message: "Plug-in license:",
-        default: "MIT"
-    },
-    {
-        name: "link",
-        type: "input",
-        message: "Plug-in link:",
-        validate: (input: string) => {
-            if (/^(http|https):\/\//g.test(input)) return true;
-            else return "Url link has to be http or https";
-        }
-    },
-    {
-        name: "route",
-        type: "input",
-        message: "Plug-in route",
-        default: "plugin"
-    }
-];
-
-function populateOptions(answers: inquirer.Answers): RawPluginMetadata {
+function populateOptions(answers: inquirer.Answers): PluginMetadata {
     const options: any = {};
     Object
         .keys(answers)
@@ -121,7 +27,45 @@ function populateOptions(answers: inquirer.Answers): RawPluginMetadata {
 
             options[key] = answers[key];
         });
-    return options;
+
+    const parsedOptionsCopy: PluginMetadata = <any>Object.assign({}, options);
+
+    // If plugin scope property of options object isn't array
+    if (!Array.isArray(options["scope"])) {
+        // Split the string and assign the result array to options scope property
+        parsedOptionsCopy["scope"] = options["scope"].split(", ");
+    } else {
+        // Assign the array to options scope property
+        parsedOptionsCopy["scope"] = [options["scope"]];
+    }
+
+    // If permission property of options isn't array
+    if (!Array.isArray(options["permissions"])) {
+        // Split the string and assign the result array to options permission property
+        parsedOptionsCopy["permissions"] = options["permissions"].split(", ");
+    } else {
+        // Assign the array to options permission property
+        parsedOptionsCopy["permissions"] = [options["permissions"]];
+    }
+
+    return parsedOptionsCopy;
+}
+
+function parseFileName(fileName: string) {
+    const pathArray = fileName.split("/");
+    pathArray.splice(pathArray.indexOf(pathArray[0]), 1);
+
+    let parsedName = "";
+    pathArray.forEach((el, index) => {
+        if (index === 0) {
+            parsedName += el;
+            return;
+        }
+
+        parsedName += `\\${el}`;
+    });
+
+    return parsedName;
 }
 
 program.version("1.0.0").description("vClould Director Extension CLI");
@@ -134,9 +78,42 @@ program
             .then((answers: UserAnswer) => {
                 const projectChoice = answers["projectChoice"];
                 const projectName = answers["projectName"];
-                const templatePath = `${__dirname}/templates/${projectChoice}`;
-                fs.mkdirSync(`${CURR_DIR}/${projectName}`);
-                createDirectoryContents(templatePath, projectName, populateOptions(answers));
+                const templatePath = `${__dirname}\\templates\\${projectChoice}`;
+
+                const parsedOptionsCopy = populateOptions(answers);
+                fs.mkdirSync(`${CURR_DIR}\\${projectName}`);
+
+                fs.createReadStream(templatePath)
+                    .pipe(unzipper.Parse())
+                    .on("entry", function (entry) {
+                        const fileName: string = entry.path;
+                        const type: string = entry.type; // 'Directory' or 'File'
+
+                        const parsedName = parseFileName(fileName);
+                        const filePath = `${CURR_DIR}\\${projectName}\\${parsedName}`;
+
+                        if (type === "File") {
+                            entry
+                                .buffer()
+                                .then((content: Buffer) => {
+                                    fs.writeFileSync(filePath, content, "UTF-8");
+
+                                    if (dynamicFiles.has(parsedName)) {
+                                        ejs.renderFile(filePath, { data: parsedOptionsCopy }, {}, (err: Error, data: string) => {
+                                            const writeStream = fs.createWriteStream(filePath);
+                                            // If error log it
+                                            if (err) console.log("Error in renderFile", err);
+                                            // Pass the data to the writable stream instance
+                                            writeStream.write(data);
+                                            // Close the stream after data is wrotten.
+                                            writeStream.close();
+                                        });
+                                    }
+                                });
+                        } else if (type === "Directory") {
+                            fs.mkdirSync(`${CURR_DIR}\\${projectName}\\${parsedName}`);
+                        }
+                    });
             });
     });
 
