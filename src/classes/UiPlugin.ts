@@ -3,6 +3,7 @@ import path, { resolve } from "path";
 import request from "request";
 import { UiPluginMetadataResponse, UiPluginMetadata, PluginMetadata } from "../interfaces/PluginMetadata";
 import { colors } from "../utilities/colors";
+import { Spinner } from "cli-spinner";
 const CWD = process.cwd();
 
 interface UiRequestMetadata {
@@ -16,6 +17,9 @@ interface UiRequestMetadata {
     bodyOnly?: boolean;
 }
 
+const spinner = new Spinner();
+spinner.setSpinnerString("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏");
+
 export class UiPlugin {
     private _url: string;
     private _username: string;
@@ -23,6 +27,7 @@ export class UiPlugin {
     private _org: string;
     private _token: string;
     private _publishForAll: boolean;
+    private tasks: any[];
 
     constructor(url: string, org: string, username: string, password: string, forAll: boolean) {
         this.url = url;
@@ -30,6 +35,7 @@ export class UiPlugin {
         this.username = username;
         this.password = password;
         this.publishForAll = forAll;
+        this.tasks = [];
     }
 
     /**
@@ -141,17 +147,35 @@ export class UiPlugin {
      * @param fileAbsPath path to file
      * @param enabled specify plugin like enabled
      */
-    private parseManifest(fileAbsPath: string, enabled: true): Promise<UiPluginMetadata> {
-        return new Promise<UiPluginMetadata>((resolve, reject) => {
-            fs.readFile(fileAbsPath, (error: Error, data: Buffer) => {
-                if (error) {
-                    reject(new Error(error.message));
+    private parseManifest(body: string): void {
+        spinner.setSpinnerTitle("%s Parse Manifest");
+        spinner.start();
+
+        fs.readFile(`${CWD}/src/public/manifest.json`, (error: Error, data: Buffer) => {
+            if (error) {
+                spinner.stop();
+                this.next(error, null);
+                return;
+            }
+
+            const manifest: PluginMetadata = <PluginMetadata>JSON.parse(data.toString("utf8"));
+
+            let eid: string;
+            const extensions: UiPluginMetadataResponse[] = JSON.parse(body);
+
+            extensions.forEach((ext: UiPluginMetadataResponse) => {
+                if (
+                    manifest.name === ext.pluginName &&
+                    manifest.version === ext.version
+                ) {
+                    eid = ext.id;
                     return;
                 }
+            });
 
-                const manifest: PluginMetadata = <PluginMetadata>JSON.parse(data.toString("utf8"));
-
-                resolve({
+            if (!eid) {
+                spinner.stop();
+                this.next(null, {
                     "pluginName": manifest["name"],
                     "vendor": manifest["vendor"],
                     "description": manifest["description"],
@@ -160,33 +184,43 @@ export class UiPlugin {
                     "link": manifest["link"],
                     "tenant_scoped": manifest["scope"].indexOf("tenant") !== -1 ? true : false,
                     "provider_scoped": manifest["scope"].indexOf("service-provider") !== -1 ? true : false,
-                    "enabled": enabled
+                    "enabled": true
                 });
-            });
+            } else {
+                spinner.stop();
+                console.log(colors.FgYellow, "Extensions with this name and version already exists.", colors.Reset);
+            }
         });
     }
 
-    private authorize(): Promise<void> {
-        return new Promise((resolve, reject) => {
-            this.request<request.Response>({
-                method: "POST",
-                path: "/api/sessions",
-                auth: `Basic ${Buffer.from(`${this.username}@${this.org}:${this.password}`).toString("base64")}`,
-                accept: "application/*+xml;version=30.0"
-            })
-                .then((res) => {
-                    if (!res.headers["x-vcloud-authorization"]) {
-                        reject(new Error("x-vcloud-authorization wasn't found..."));
-                        return;
-                    }
+    /**
+     * Gets authorize token from server
+     */
+    private authorize(): void {
+        spinner.setSpinnerTitle("%s Authorization");
+        spinner.start();
 
-                    this.token = <string>res.headers["x-vcloud-authorization"];
-                    resolve();
-                })
-                .catch((err: Error) => {
-                    reject(err);
-                });
-        });
+        this.request<request.Response>({
+            method: "POST",
+            path: "/api/sessions",
+            auth: `Basic ${Buffer.from(`${this.username}@${this.org}:${this.password}`).toString("base64")}`,
+            accept: "application/*+xml;version=30.0"
+        })
+            .then((res) => {
+                if (!res.headers["x-vcloud-authorization"]) {
+                    spinner.stop();
+                    this.next(new Error("x-vcloud-authorization wasn't found..."), null);
+                    return;
+                }
+
+                this.token = <string>res.headers["x-vcloud-authorization"];
+                spinner.stop();
+                this.next(null, null);
+            })
+            .catch((err: Error) => {
+                spinner.stop();
+                this.next(err, null);
+            });
     }
 
     /**
@@ -242,12 +276,23 @@ export class UiPlugin {
     /**
      * Get all ui extensions.
      */
-    private getUiExtensions(): Promise<string> {
-        return this.request<string>({
+    private getUiExtensions(): void {
+        spinner.setSpinnerTitle("%s Get Ui Extensions");
+        spinner.start();
+
+        this.request<string>({
             method: "GET",
             path: "/cloudapi/extensions/ui/",
             bodyOnly: true
-        });
+        })
+            .then((body) => {
+                spinner.stop();
+                this.next(null, body);
+            })
+            .catch((error) => {
+                spinner.stop();
+                this.next(error, null);
+            });
     }
 
     /**
@@ -315,117 +360,128 @@ export class UiPlugin {
     /**
      * Reads the file in-memory and send it.
      * @param link transfer link where extension will be uploaded.
-     * @param dir absolute path to extensions directory.
      */
-    private putUiExtensionPluginFromFile(link: string, dir: string): Promise<request.Response> {
-        const file = fs.readFileSync(dir);
-        return this.putUiExtensionPlugin(link, file);
+    private putUiExtensionPluginFromFile(data: { link: string, eid: string }): void {
+        spinner.setSpinnerTitle("%s Put Ui Extension Plugin From File");
+        spinner.start();
+
+        const file = fs.readFileSync(`${CWD}/dist/plugin.zip`);
+        this.putUiExtensionPlugin(data.link, file)
+            .then(() => {
+                spinner.stop(true);
+
+                if (this.publishForAll) {
+                    this.next(null, data.eid);
+                    return;
+                }
+
+                console.log(colors.FgGreen, "Completed!", colors.Reset);
+            })
+            .catch((error) => {
+                spinner.stop();
+                this.next(error, null);
+            });
     }
 
     /**
      * Publish extension for all tenants.
      * @param eid id of the extension.
      */
-    private postUiExtensionTenantsPublishAll(eid: string): Promise<request.Response> {
-        return this.request<request.Response>({
+    private postUiExtensionTenantsPublishAll(eid: string): void {
+        spinner.setSpinnerTitle("%s Publish for all tenants");
+        spinner.start();
+
+        this.request<request.Response>({
             method: "POST",
             path: `/cloudapi/extensions/ui/${eid}/tenants/publishAll`
+        })
+        .then(() => {
+            spinner.stop(true);
+            console.log(colors.FgGreen, "Completed!", colors.Reset);
+        })
+        .catch((error) => {
+            spinner.stop();
+            this.next(error, null);
         });
     }
 
     /**
      * Upload extension.
      * @param eid id of the extension.
-     * @param dir absolute path to extensions directory.
-     * @param publishAll flag for publish
      */
-    private addPlugin(eid: string, dir: string, publishAll: boolean): Promise<void> {
-        return new Promise<void>((resolve, reject) => {
-            this.postUiExtensionPluginFromFile(eid, dir)
-                .then((response: request.Response) => {
-                    const responseCopy: any = Object.assign({}, response);
-                    responseCopy.headers["link"] = responseCopy.headers["link"].split(">")[0];
-                    const link = <string>responseCopy.headers["link"];
+    private addPlugin(eid: string): void {
+        spinner.setSpinnerTitle("%s Add Plugin");
+        spinner.start();
 
-                    return this.putUiExtensionPluginFromFile(link.substr(1), dir);
-                })
-                .then(() => {
-                    if (publishAll) {
-                        this.postUiExtensionTenantsPublishAll(eid);
-                    }
+        this.postUiExtensionPluginFromFile(eid, `${CWD}/dist/plugin.zip`)
+            .then((response: request.Response) => {
+                const responseCopy: any = Object.assign({}, response);
+                responseCopy.headers["link"] = responseCopy.headers["link"].split(">")[0];
+                const link = <string>responseCopy.headers["link"];
 
-                    resolve();
-                })
-                .catch((error: Error) => {
-                    reject(error);
-                });
-        });
+                spinner.stop();
+                this.next(null, { link: link.substr(1), eid });
+            })
+            .catch((error: Error) => {
+                spinner.stop();
+                this.next(error, null);
+            });
     }
 
     /**
      * Upload extension.
      * @param manifest manifest.json of the extensions which will be uploaded
-     * @param dir the absolute path to the extensions build.
-     * @param publishAll flag which determinates the availability to tenants.
      */
-    private addExtension(manifest: UiPluginMetadata, dir: string, publishAll: boolean): Promise<void> {
-        return new Promise<void>((resolve, reject) => {
-            this.postUiExtension(manifest)
-                .then((res: string) => {
-                    const ext: UiPluginMetadataResponse = JSON.parse(res);
-                    const eid = ext.id;
-                    return this.addPlugin(eid, dir, publishAll);
-                })
-                .then(() => {
-                    resolve();
-                })
-                .catch((error: Error) => {
-                    reject(error);
-                });
-        });
+    private addExtension(manifest: UiPluginMetadata): void {
+        spinner.setSpinnerTitle("%s Add Extension");
+        spinner.start();
+
+        this.postUiExtension(manifest)
+            .then((res: string) => {
+                const ext: UiPluginMetadataResponse = JSON.parse(res);
+                const eid = ext.id;
+                spinner.stop();
+                this.next(null, eid);
+            })
+            .catch((error) => {
+                spinner.stop();
+                this.next(error, null);
+            });
     }
 
     /**
-     * Deploy plugin to given endpoint.
+     * Deploy extension to endpoint.
      */
     public deploy(): void {
         console.log(colors.FgGreen, "Deploying...", colors.Reset);
 
-        let manifest: UiPluginMetadata;
+        this.tasks = [
+            this.authorize.bind(this),
+            this.getUiExtensions.bind(this),
+            this.parseManifest.bind(this),
+            this.addExtension.bind(this),
+            this.addPlugin.bind(this),
+            this.putUiExtensionPluginFromFile.bind(this),
+            this.postUiExtensionTenantsPublishAll.bind(this)
+        ];
 
-        this.parseManifest(`${CWD}/src/public/manifest.json`, true)
-            .then((data) => {
-                manifest = data;
-                return this.authorize();
-            })
-            .then(() => {
-                return this.getUiExtensions();
-            })
-            .then((body) => {
-                let eid: string;
-                const extensions: UiPluginMetadataResponse[] = JSON.parse(body);
+        this.next(null, null);
+    }
 
-                extensions.forEach((ext: UiPluginMetadataResponse) => {
-                    if (
-                        manifest.pluginName === ext.pluginName &&
-                        manifest.version === ext.pluginName
-                    ) {
-                        eid = ext.id;
-                        return;
-                    }
-                });
+    /**
+     * Serial flow control contorller
+     * @param error error which is passed by methods in the flow control.
+     * @param result data which will be passed to the next method in flow control.
+     */
+    public next(error: Error, result: any): void {
+        if (error) {
+            console.log(colors.BgRed, error, colors.Reset);
+        }
 
-                if (!eid) {
-                    return this.addExtension(manifest, `${CWD}/dist/plugin.zip`, this.publishForAll);
-                } else {
-                    console.log(colors.FgYellow, "Extensions with this name and version already exists.", colors.Reset);
-                }
-            })
-            .then(() => {
-                console.log(colors.FgGreen, "Deploying Completed!", colors.Reset);
-            })
-            .catch((error: Error) => {
-                console.log(colors.BgRed, error.message, colors.Reset);
-            });
+        const currentTask = this.tasks.shift();
+
+        if (currentTask) {
+            currentTask(result);
+        }
     }
 }

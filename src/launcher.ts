@@ -9,8 +9,6 @@ export const launcher = () => {
         .alias("D")
         .description("Deploy plugin with given endpoint, user and password.")
         .action((url, org, user, password, cmd) => {
-            console.log(colors.FgGreen, `The extension will be uploaded on ${url} via ${org}:${user}${cmd.all ? " for all tenants." : "."}`, colors.Reset);
-
             const ui = new UiPlugin(url, org, user, password, cmd.all);
             ui.deploy();
         });

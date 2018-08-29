@@ -17,6 +17,7 @@
     "watch-ts": "tsc -w"
   },
   "dependencies": {
+    "cli-spinner": "0.2.8",
     "commander": "2.16.0",
     "ejs": "2.6.1",
     "inquirer": "6.0.0",
@@ -24,6 +25,7 @@
     "unzipper": "0.9.3"
   },
   "devDependencies": {
+    "@types/cli-spinner": "^0.2.0",
     "@types/ejs": "^2.6.0",
     "@types/inquirer": "0.0.43",
     "@types/node": "10.9.2",
