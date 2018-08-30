@@ -1,11 +1,10 @@
 import { UiPlugin } from "../classes/UiPlugin";
 import { UiPluginMetadataResponse } from "../interfaces/PluginMetadata";
-import { credentialsQuestions } from "../questions";
+import { credentialsQuestions } from "./questions";
 import { prompt } from "inquirer";
 import { UserCredentialsAnswers } from "../interfaces/UserAnswer";
 import { getPropsWithout } from "../utilities/object-helpers";
 import { colors } from "../utilities/colors";
-import request from "request";
 
 export function toggleTenantScope(cmd: any, action: string): void {
     let ui: UiPlugin;
@@ -32,7 +31,7 @@ export function toggleTenantScope(cmd: any, action: string): void {
             });
 
             if (cmd.all) {
-                const actions: Promise<request.Response>[] = [];
+                const actions: Promise<void>[] = [];
                 exts.forEach((ext) => {
                     actions.push(
                         action === "publish" ?

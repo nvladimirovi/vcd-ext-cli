@@ -19,8 +19,7 @@ interface UiRequestMetadata {
     bodyOnly?: boolean;
 }
 
-const spinner = new Spinner();
-spinner.setSpinnerString("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏");
+const loader = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏";
 
 export class UiPlugin {
     private _url: string;
@@ -149,10 +148,12 @@ export class UiPlugin {
      * @param enabled specify plugin like enabled
      */
     private parseManifest(body: string): Promise<UiPluginMetadataResponse> {
-        return new Promise<UiPluginMetadataResponse>((resolve, reject) => {
-            spinner.setSpinnerTitle("%s Parse Manifest");
-            spinner.start();
+        const spinner = new Spinner();
+        spinner.setSpinnerString(loader);
+        spinner.setSpinnerTitle("%s Parse Manifest");
+        spinner.start();
 
+        return new Promise<UiPluginMetadataResponse>((resolve, reject) => {
             fs.readFile(`${CWD}/src/public/manifest.json`, (error: Error, data: Buffer) => {
                 if (error) {
                     spinner.stop(true);
@@ -201,10 +202,12 @@ export class UiPlugin {
      * Gets authorize token from server
      */
     private authorize(): Promise<void> {
-        return new Promise<void>((resolve, reject) => {
-            spinner.setSpinnerTitle("%s Authorization");
-            spinner.start();
+        const spinner = new Spinner();
+        spinner.setSpinnerString(loader);
+        spinner.setSpinnerTitle("%s Authorization");
+        spinner.start();
 
+        return new Promise<void>((resolve, reject) => {
             this.request<request.Response>({
                 method: "POST",
                 path: "/api/sessions",
@@ -284,10 +287,12 @@ export class UiPlugin {
      * Get all ui extensions.
      */
     private getUiExtensions(): Promise<string> {
-        return new Promise<string>((resolve, reject) => {
-            spinner.setSpinnerTitle("%s Get Ui Extensions");
-            spinner.start();
+        const spinner = new Spinner();
+        spinner.setSpinnerString(loader);
+        spinner.setSpinnerTitle("%s Get Ui Extensions");
+        spinner.start();
 
+        return new Promise<string>((resolve, reject) => {
             this.request<string>({
                 method: "GET",
                 path: "/cloudapi/extensions/ui/",
@@ -371,10 +376,12 @@ export class UiPlugin {
      * @param link transfer link where extension will be uploaded.
      */
     private putUiExtensionPluginFromFile(data: { link: string, eid: string }): Promise<string> {
-        return new Promise<string>((resolve, reject) => {
-            spinner.setSpinnerTitle("%s Put Ui Extension Plugin From File");
-            spinner.start();
+        const spinner = new Spinner();
+        spinner.setSpinnerString(loader);
+        spinner.setSpinnerTitle("%s Put Ui Extension Plugin From File");
+        spinner.start();
 
+        return new Promise<string>((resolve, reject) => {
             const file = fs.readFileSync(`${CWD}/dist/plugin.zip`);
             this.putUiExtensionPlugin(data.link, file)
                 .then(() => {
@@ -392,10 +399,25 @@ export class UiPlugin {
      * Publish extension for all tenants.
      * @param eid id of the extension.
      */
-    public postUiExtensionTenantsPublishAll(eid: string): Promise<request.Response> {
-        return this.request<request.Response>({
-            method: "POST",
-            path: `/cloudapi/extensions/ui/${eid}/tenants/publishAll`
+    public postUiExtensionTenantsPublishAll(eid: string): Promise<void> {
+        const spinner = new Spinner();
+        spinner.setSpinnerString(loader);
+        spinner.setSpinnerTitle("%s Publishing for all tenants.");
+        spinner.start();
+
+        return new Promise<void>((resolve, reject) => {
+            this.request<request.Response>({
+                method: "POST",
+                path: `/cloudapi/extensions/ui/${eid}/tenants/publishAll`
+            })
+            .then(() => {
+                spinner.stop(true);
+                resolve();
+            })
+            .catch((error) => {
+                spinner.stop(true);
+                reject(error);
+            });
         });
     }
 
@@ -403,10 +425,25 @@ export class UiPlugin {
      * Unpublish extension for all tenants.
      * @param eid id of the extension.
      */
-    public postUiExtensionTenantsUnpublishAll(eid: string): Promise<request.Response> {
-        return this.request<request.Response>({
-            method: "POST",
-            path: `/cloudapi/extensions/ui/${eid}/tenants/unpublishAll`
+    public postUiExtensionTenantsUnpublishAll(eid: string): Promise<void> {
+        const spinner = new Spinner();
+        spinner.setSpinnerString(loader);
+        spinner.setSpinnerTitle("%s Unpublishing for all tenants.");
+        spinner.start();
+
+        return new Promise<void>((resolve, reject) => {
+            this.request<request.Response>({
+                method: "POST",
+                path: `/cloudapi/extensions/ui/${eid}/tenants/unpublishAll`
+            })
+            .then(() => {
+                spinner.stop(true);
+                resolve();
+            })
+            .catch((error) => {
+                spinner.stop(true);
+                reject(error);
+            });
         });
     }
 
@@ -415,10 +452,12 @@ export class UiPlugin {
      * @param eid id of the extension.
      */
     private addPlugin(eid: string): Promise<{ link: string, eid: string }> {
-        return new Promise<{ link: string, eid: string }>((resolve, reject) => {
-            spinner.setSpinnerTitle("%s Add Plugin");
-            spinner.start();
+        const spinner = new Spinner();
+        spinner.setSpinnerString(loader);
+        spinner.setSpinnerTitle("%s Add Plugin");
+        spinner.start();
 
+        return new Promise<{ link: string, eid: string }>((resolve, reject) => {
             this.postUiExtensionPluginFromFile(eid, `${CWD}/dist/plugin.zip`)
                 .then((response: request.Response) => {
                     const responseCopy: any = Object.assign({}, response);
@@ -440,10 +479,12 @@ export class UiPlugin {
      * @param manifest manifest.json of the extensions which will be uploaded
      */
     private addExtension(manifest: UiPluginMetadata): Promise<string> {
-        return new Promise<string>((resolve, reject) => {
-            spinner.setSpinnerTitle("%s Add Extension");
-            spinner.start();
+        const spinner = new Spinner();
+        spinner.setSpinnerString(loader);
+        spinner.setSpinnerTitle("%s Add Extension");
+        spinner.start();
 
+        return new Promise<string>((resolve, reject) => {
             this.postUiExtension(manifest)
                 .then((res: string) => {
                     const ext: UiPluginMetadataResponse = JSON.parse(res);

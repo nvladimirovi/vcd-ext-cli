@@ -5,7 +5,7 @@ import ejs from "ejs";
 import unzipper from "unzipper";
 import { UserAnswer } from "./interfaces/UserAnswer";
 import { PluginMetadata } from "./interfaces/PluginMetadata";
-import { generateQuestions } from "./questions";
+import { generateQuestions } from "./common/questions";
 
 const { prompt } = inquirer;
 const CURR_DIR = process.cwd();
