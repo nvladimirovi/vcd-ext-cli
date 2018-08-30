@@ -5,7 +5,7 @@ const CHOICES = fs.readdirSync(`${__dirname}/templates`);
 const CURR_DIR = process.cwd();
 
 // Craft questions to present to users
-export const questions: inquirer.Questions<{}> = [
+export const generateQuestions: inquirer.Questions<{}> = [
     {
         name: "projectChoice",
         type: "list",
@@ -102,5 +102,47 @@ export const questions: inquirer.Questions<{}> = [
         type: "input",
         message: "Plug-in route",
         default: "plugin"
+    }
+];
+
+export const credentialsQuestions = [
+    {
+        name: "url",
+        type: "input",
+        message: "Env endpoint:",
+        validate: function (input: string) {
+            if (input.length >= 3) {
+                if (/^(http|https):\/\//g.test(input)) return true;
+                else return "Url link has to be http or https";
+            }
+            else return "Env endpoint may can not contain less then 3 letters.";
+        }
+    },
+    {
+        name: "tenant",
+        type: "input",
+        message: "Tenant name:",
+        validate: function (input: string) {
+            if (input.length >= 3) return true;
+            else return "Tenant name may can not contain less then 3 letters.";
+        }
+    },
+    {
+        name: "username",
+        type: "input",
+        message: "Username:",
+        validate: function (input: string) {
+            if (input.length >= 3) return true;
+            else return "Username may can not contain less then 3 letters.";
+        }
+    },
+    {
+        name: "password",
+        type: "password",
+        message: "Password:",
+        validate: function (input: string) {
+            if (input.length >= 3) return true;
+            else return "Password may can not contain less then 3 letters.";
+        }
     }
 ];
