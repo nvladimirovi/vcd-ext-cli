@@ -1,11 +1,17 @@
 import fs from "fs";
-import path, { resolve } from "path";
+import path from "path";
 import request from "request";
-import { UiPluginMetadataResponse, UiPluginMetadata, PluginMetadata } from "../interfaces/PluginMetadata";
+import { UiPluginMetadataResponse, PluginMetadata } from "../interfaces/PluginMetadata";
 import { colors } from "../utilities/colors";
 import { Spinner } from "cli-spinner";
-import { EventEmitter } from "events";
 import { Serial } from "./Serial";
+import { options } from "../utilities/options";
+
+export interface UiPluginOptions {
+    all?: boolean;
+    replace?: boolean;
+}
+
 const CWD = process.cwd();
 
 interface UiRequestMetadata {
@@ -27,15 +33,20 @@ export class UiPlugin {
     private _password: string;
     private _tenant: string;
     private _token: string;
-    private _publishForAll: boolean;
     private _serial = new Serial();
 
-    constructor(url: string, tenant: string, username: string, password: string, forAll: boolean = false) {
+    private _options: UiPluginOptions;
+
+    constructor(url: string, tenant: string, username: string, password: string, opts?: UiPluginOptions) {
         this.url = url;
         this.tenant = tenant;
         this.username = username;
         this.password = password;
-        this.publishForAll = forAll;
+
+        this._options = {
+            all: opts.all || null,
+            replace: opts.replace || null
+        };
     }
 
     /**
@@ -129,17 +140,46 @@ export class UiPlugin {
     }
 
     /**
-     * PublishFor getter.
+     * Replace plugin.
+     * @param parsedData parsed version of the manifest json.
      */
-    get publishForAll(): boolean {
-        return this._publishForAll;
-    }
+    private replace(data: { parsedData: UiPluginMetadataResponse, eid: string }): Promise<string> {
+        const spinner = new Spinner();
+        spinner.setSpinnerString(loader);
+        spinner.setSpinnerTitle("%s Replacing");
+        spinner.start();
 
-    /**
-     * PublishFor setter.
-     */
-    set publishForAll(val: boolean) {
-        this._publishForAll = val;
+        return new Promise<string>((resolve, reject) => {
+            if (!data.eid) {
+                this.postUiExtension(data.parsedData)
+                    .then((res: string) => {
+                        const ext: UiPluginMetadataResponse = JSON.parse(res);
+                        const eid = ext.id;
+                        spinner.stop();
+                        resolve(eid);
+                    })
+                    .catch((error) => {
+                        spinner.stop(true);
+                        reject(error);
+                    });
+                return;
+            }
+
+            this.delete([data.eid])
+                .then(() => {
+                    return this.postUiExtension(data.parsedData);
+                })
+                .then((res: string) => {
+                    const ext: UiPluginMetadataResponse = JSON.parse(res);
+                    const eid = ext.id;
+                    spinner.stop();
+                    resolve(eid);
+                })
+                .catch((error) => {
+                    spinner.stop(true);
+                    reject(error);
+                });
+        });
     }
 
     /**
@@ -147,13 +187,13 @@ export class UiPlugin {
      * @param fileAbsPath path to file
      * @param enabled specify plugin like enabled
      */
-    private parseManifest(body: string): Promise<UiPluginMetadataResponse> {
+    private parseManifest(body: string): Promise<{ parsedData: UiPluginMetadataResponse, eid: string }> {
         const spinner = new Spinner();
         spinner.setSpinnerString(loader);
         spinner.setSpinnerTitle("%s Parse Manifest");
         spinner.start();
 
-        return new Promise<UiPluginMetadataResponse>((resolve, reject) => {
+        return new Promise<{ parsedData: UiPluginMetadataResponse, eid: string }>((resolve, reject) => {
             fs.readFile(`${CWD}/src/public/manifest.json`, (error: Error, data: Buffer) => {
                 if (error) {
                     spinner.stop(true);
@@ -176,24 +216,30 @@ export class UiPlugin {
                     }
                 });
 
-                if (!eid) {
-                    const parsedData: UiPluginMetadataResponse = {
-                        "pluginName": manifest["name"],
-                        "vendor": manifest["vendor"],
-                        "description": manifest["description"],
-                        "version": manifest["version"],
-                        "license": manifest["license"],
-                        "link": manifest["link"],
-                        "tenant_scoped": manifest["scope"].indexOf("tenant") !== -1 ? true : false,
-                        "provider_scoped": manifest["scope"].indexOf("service-provider") !== -1 ? true : false,
-                        "enabled": true
-                    };
+                const parsedData: UiPluginMetadataResponse = {
+                    "pluginName": manifest["name"],
+                    "vendor": manifest["vendor"],
+                    "description": manifest["description"],
+                    "version": manifest["version"],
+                    "license": manifest["license"],
+                    "link": manifest["link"],
+                    "tenant_scoped": manifest["scope"].indexOf("tenant") !== -1 ? true : false,
+                    "provider_scoped": manifest["scope"].indexOf("service-provider") !== -1 ? true : false,
+                    "enabled": true
+                };
+
+                if (!eid || this._options.replace) {
                     spinner.stop(true);
-                    resolve(parsedData);
-                } else {
-                    spinner.stop(true);
-                    console.log(colors.FgYellow, "Extensions with this name and version already exists.", colors.Reset);
+                    resolve({ parsedData, eid });
+                    return;
                 }
+
+                spinner.stop(true);
+                console.log(
+                    colors.FgYellow,
+                    `Extensions with this name and version already exists, run command with replace flag (${options.replace}), to replace the plugin`,
+                    colors.Reset
+                );
             });
         });
     }
@@ -236,7 +282,7 @@ export class UiPlugin {
      * Makes request to given endpoint.
      */
     private request<T>(opts: UiRequestMetadata): Promise<T> {
-        return new Promise((resolve, reject) => {
+        return new Promise<T>((resolve, reject) => {
             const headers: any = {};
             if (this.token) {
                 headers["x-vcloud-authorization"] = this.token;
@@ -313,7 +359,7 @@ export class UiPlugin {
      * Post ui extension with given manifest json.
      * @param manifest the manifest of the extension which will be uploaded.
      */
-    private postUiExtension(manifest: UiPluginMetadata): Promise<string> {
+    private postUiExtension(manifest: UiPluginMetadataResponse): Promise<string> {
         return this.request<string>({
             method: "POST",
             path: "/cloudapi/extensions/ui/",
@@ -410,14 +456,14 @@ export class UiPlugin {
                 method: "POST",
                 path: `/cloudapi/extensions/ui/${eid}/tenants/publishAll`
             })
-            .then(() => {
-                spinner.stop(true);
-                resolve();
-            })
-            .catch((error) => {
-                spinner.stop(true);
-                reject(error);
-            });
+                .then(() => {
+                    spinner.stop(true);
+                    resolve();
+                })
+                .catch((error) => {
+                    spinner.stop(true);
+                    reject(error);
+                });
         });
     }
 
@@ -436,14 +482,14 @@ export class UiPlugin {
                 method: "POST",
                 path: `/cloudapi/extensions/ui/${eid}/tenants/unpublishAll`
             })
-            .then(() => {
-                spinner.stop(true);
-                resolve();
-            })
-            .catch((error) => {
-                spinner.stop(true);
-                reject(error);
-            });
+                .then(() => {
+                    spinner.stop(true);
+                    resolve();
+                })
+                .catch((error) => {
+                    spinner.stop(true);
+                    reject(error);
+                });
         });
     }
 
@@ -478,14 +524,14 @@ export class UiPlugin {
      * Upload extension.
      * @param manifest manifest.json of the extensions which will be uploaded
      */
-    private addExtension(manifest: UiPluginMetadata): Promise<string> {
+    private addExtension(data: { parsedData: UiPluginMetadataResponse, eid: string }): Promise<string> {
         const spinner = new Spinner();
         spinner.setSpinnerString(loader);
         spinner.setSpinnerTitle("%s Add Extension");
         spinner.start();
 
         return new Promise<string>((resolve, reject) => {
-            this.postUiExtension(manifest)
+            this.postUiExtension(data.parsedData)
                 .then((res: string) => {
                     const ext: UiPluginMetadataResponse = JSON.parse(res);
                     const eid = ext.id;
@@ -502,24 +548,18 @@ export class UiPlugin {
     /**
      * Deploy extension to endpoint.
      */
-    public deploy(): void {
+    public deploy(): Promise<any[]> {
         console.log(colors.FgGreen, "Deploying...", colors.Reset);
 
-        this._serial.serial([
+        return this._serial.serial([
             this.authorize.bind(this),
             this.getUiExtensions.bind(this),
             this.parseManifest.bind(this),
-            this.addExtension.bind(this),
+            this._options.replace ? this.replace.bind(this) : this.addExtension.bind(this),
             this.addPlugin.bind(this),
             this.putUiExtensionPluginFromFile.bind(this),
-            this.publishForAll ? this.postUiExtensionTenantsPublishAll.bind(this) : null
-        ])
-        .then(() => {
-            console.log(colors.FgGreen, "Completed!", colors.Reset);
-        })
-        .catch((error: Error) => {
-            console.log(colors.FgRed, error, colors.Reset);
-        });
+            this._options.all ? this.postUiExtensionTenantsPublishAll.bind(this) : null
+        ]);
     }
 
     /**
@@ -530,5 +570,25 @@ export class UiPlugin {
             this.authorize.bind(this),
             this.getUiExtensions.bind(this)
         ]);
+    }
+
+    /**
+     * Deletes list of extensions.
+     * @param exts list of extensions to be deleted.
+     */
+    public delete(eids: string[]): Promise<request.Response[]> {
+        const actions: Promise<request.Response>[] = [];
+
+        eids.forEach((id) => {
+            actions.push(this.request<request.Response>({
+                method: "DELETE",
+                path: `/cloudapi/extensions/ui/${id}`,
+                accept: "application/*+json;version=31.0,application/json;version=31.0",
+                content_type: "application/json"
+            }));
+        });
+
+        return Promise
+            .all(actions);
     }
 }

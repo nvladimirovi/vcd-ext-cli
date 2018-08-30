@@ -28,18 +28,6 @@ export interface PluginMetadata {
     route?: string;
 }
 
-export interface UiPluginMetadata {
-    pluginName: string;
-    vendor: string;
-    description?: string;
-    version: string;
-    license: string;
-    link: string;
-    tenant_scoped?: boolean;
-    provider_scoped?: boolean;
-    enabled?: boolean;
-}
-
 export interface UiPluginMetadataResponse {
     pluginName: string;
     vendor: string;

@@ -1,7 +1,7 @@
 import program from "commander";
 import { UiPlugin } from "./classes/UiPlugin";
 import { prompt } from "inquirer";
-import { credentialsQuestions } from "./common/questions";
+import { credentialsQuestions } from "./questions";
 import { UserCredentialsAnswers } from "./interfaces/UserAnswer";
 import { colors } from "./utilities/colors";
 

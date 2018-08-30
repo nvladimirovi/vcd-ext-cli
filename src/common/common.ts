@@ -1,12 +1,28 @@
-import { UiPlugin } from "../classes/UiPlugin";
+import { UiPlugin, UiPluginOptions } from "../classes/UiPlugin";
 import { UiPluginMetadataResponse } from "../interfaces/PluginMetadata";
-import { credentialsQuestions } from "./questions";
+import { credentialsQuestions } from "../questions";
 import { prompt } from "inquirer";
 import { UserCredentialsAnswers } from "../interfaces/UserAnswer";
 import { getPropsWithout } from "../utilities/object-helpers";
 import { colors } from "../utilities/colors";
 
-export function toggleTenantScope(cmd: any, action: string): void {
+export function extractExtensionsOnlyWith(props: string[], exts: UiPluginMetadataResponse[]) {
+    exts.forEach((ext, index) => {
+        const keysToDelete: string[] = [];
+
+        Object.keys(ext).forEach((key) => {
+            if (props.indexOf(key) === -1) {
+                keysToDelete.push(key);
+            }
+        });
+
+        exts[index] = getPropsWithout(keysToDelete, ext);
+    });
+
+    return exts;
+}
+
+export function toggleTenantScope(cmd: UiPluginOptions, action: string): void {
     let ui: UiPlugin;
 
     prompt(credentialsQuestions)
@@ -16,19 +32,7 @@ export function toggleTenantScope(cmd: any, action: string): void {
         })
         .then((data: any[]) => {
             // Immutable copy of all extensions
-            const exts: UiPluginMetadataResponse[] = [...<UiPluginMetadataResponse[]>JSON.parse(data[1])];
-
-            exts.forEach((ext, index) => {
-                const keysToDelete: string[] = [];
-
-                Object.keys(ext).forEach((key) => {
-                    if (key !== "pluginName" && key !== "id") {
-                        keysToDelete.push(key);
-                    }
-                });
-
-                exts[index] = getPropsWithout(keysToDelete, ext);
-            });
+            const exts: UiPluginMetadataResponse[] = extractExtensionsOnlyWith(["pluginName", "id"], [...<UiPluginMetadataResponse[]>JSON.parse(data[1])]);
 
             if (cmd.all) {
                 const actions: Promise<void>[] = [];
