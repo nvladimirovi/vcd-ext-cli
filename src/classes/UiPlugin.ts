@@ -37,15 +37,15 @@ export class UiPlugin {
 
     private _options: UiPluginOptions;
 
-    constructor(url: string, tenant: string, username: string, password: string, opts?: UiPluginOptions) {
+    constructor(url: string, tenant: string, username: string, password: string, opts: UiPluginOptions = { all: false, replace: false }) {
         this.url = url;
         this.tenant = tenant;
         this.username = username;
         this.password = password;
 
         this._options = {
-            all: opts.all || null,
-            replace: opts.replace || null
+            all: opts.all,
+            replace: opts.replace
         };
     }
 
